@@ -4,13 +4,10 @@
  * @param {!express:Request} req HTTP request context.
  * @param {!express:Response} res HTTP response context.
  */
- 
-const {Storage} = require("@google-cloud/storage")
+
+const { Storage } = require("@google-cloud/storage")
 const puppeteer = require('puppeteer');
-const csv = require('csv-parser')
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-const fs = require('fs')
-const os = require('os');
+
 
 exports.stadiaScrape = async (req, res) => {
     const filePath = "out.csv";
@@ -35,7 +32,7 @@ exports.stadiaScrape = async (req, res) => {
 
                 while (notLastPage && counter < 1) {
                     counter++;
-                    console.log("writing page",counter,"to array")
+                    console.log("writing page", counter, "to array")
                     const pageArr = await page.evaluate(async () => {
                         await new Promise(resolve => setTimeout(resolve, 5000));
                         const gamesArr = Array.from(document.querySelectorAll('div:nth-child(10) table tr td')).map(td => td.innerText)
@@ -105,7 +102,7 @@ function containsGameObject(obj, list) {
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -125,26 +122,26 @@ const compareOldAndNew = (oldData, newData) => {
 }
 
 function readCSVContent(file) {
-  return new Promise((resolve, reject) => {
-    const storage = new Storage();
-    let fileContents = new Buffer('');
-    storage.bucket("stadia-csvs").file(file).createReadStream()
-    .on('error', function(err) {
-      reject('The Storage API returned an error: ' + err);
-    })
-    .on('data', function(chunk) {
-      fileContents = Buffer.concat([fileContents, chunk]);
-    })  
-    .on('end', function() {
-        let content = fileContents.toString('utf8');
-        const objArr = content.split('\n').map(row => row.split(','))
-            .map(row => {
-                const [game, currPrice, lowestPrice] = row;
-                return {game, currPrice, lowestPrice};
+    return new Promise((resolve, reject) => {
+        const storage = new Storage();
+        let fileContents = new Buffer('');
+        storage.bucket("stadia-csvs").file(file).createReadStream()
+            .on('error', function (err) {
+                reject('The Storage API returned an error: ' + err);
             })
-      resolve(objArr);
+            .on('data', function (chunk) {
+                fileContents = Buffer.concat([fileContents, chunk]);
+            })
+            .on('end', function () {
+                let content = fileContents.toString('utf8');
+                const objArr = content.split('\n').map(row => row.split(','))
+                    .map(row => {
+                        const [game, currPrice, lowestPrice] = row;
+                        return { game, currPrice, lowestPrice };
+                    })
+                resolve(objArr);
+            });
     });
-  });
 }
 
 const writeCSVContent = async (file, data) => {
