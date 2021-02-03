@@ -1,17 +1,20 @@
-/**
- * Responds to any HTTP request.
- *
- * @param {!express:Request} req HTTP request context.
- * @param {!express:Response} res HTTP response context.
- */
 
 const { Storage } = require("@google-cloud/storage")
 const puppeteer = require('puppeteer');
+const { login } = require('./config');
+const nodemailer = require('nodemailer');
 
+let transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: login.username,
+        pass: login.pass
+    }
+});
 
 exports.stadiaScrape = async (req, res) => {
-    const filePath = "out.csv";
 
+    const filePath = "out.csv";
     const run = async () => {
         const newData = await new Promise(async (resolve, reject) => {
             try {
@@ -30,7 +33,7 @@ exports.stadiaScrape = async (req, res) => {
                 let counter = 0;
                 let notLastPage = true;
 
-                while (notLastPage && counter < 1) {
+                while (notLastPage) {//} && counter < 1) {
                     counter++;
                     console.log("writing page", counter, "to array")
                     const pageArr = await page.evaluate(async () => {
@@ -79,18 +82,36 @@ exports.stadiaScrape = async (req, res) => {
 
         const oldData = await readCSVContent("out.csv");
 
-        compareOldAndNew(oldData, newData);
-
         return [newData.filter(x => x.currPrice), oldData.filter(x => x.currPrice)];
     }
+
+
+
 
     await run()
         .then(async (content) => {
             await writeCSVContent("out.csv", content[0]);
+
+            const comparisonStrArr = compareOldAndNew(content[1], content[0]);
+
+            const mailOptions = {
+                from: 'Aaron Mackay <aarongcmackay@gmail.com>', // Something like: Jane Doe <janedoe@gmail.com>
+                to: "aarongcmackay@gmail.com",
+                subject: 'Stadia Scraping', // email subject
+                html: `<p style="font-size: 16px;">${comparisonStrArr.join("\n")}</p>` // email content in HTML
+            };
+
+            return transporter.sendMail(mailOptions, (erro, info) => {
+                if (erro) {
+                    return res.send(erro.toString());
+                }
+                return res.send('Sended');
+            });
         })
         .catch(err => {
             console.error(err);
         })
+
 
 }
 
@@ -108,6 +129,7 @@ function containsGameObject(obj, list) {
 
 const compareOldAndNew = (oldData, newData) => {
     console.log("comparing");
+    const changesArr = [];
     for (let newGameObj of newData) {
         if (newGameObj.game === "game") continue;
         const oldGameObj = oldData.find(x => x.game === newGameObj.game);
@@ -115,8 +137,9 @@ const compareOldAndNew = (oldData, newData) => {
         const [oldPrice, newPrice] = [oldGameObj.currPrice, newGameObj.currPrice].map(x => parseFloat(x.replace("£", "")));
 
         if (newPrice !== oldPrice) {
-            console.log(`${oldGameObj.game} has changed in price from ${oldGameObj.currPrice} to ${newGameObj.currPrice} (lowest Ever ${oldGameObj.lowestPrice})`);
-            // todo send email
+            const checkResult = `${oldGameObj.game} has changed in price from ${oldGameObj.currPrice} to ${newGameObj.currPrice} (lowest Ever ${oldGameObj.lowestPrice})`
+            console.log(checkResult);
+            changesArr.push(checkResult)
         }
     }
 }
